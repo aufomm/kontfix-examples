@@ -53,8 +53,6 @@ jobs:
 
     - name: Checkout repository
       uses: actions/checkout@v4
-      with:
-        ref: ${{ github.ref }}
 
     - name: Install Nix
       uses: DeterminateSystems/nix-installer-action@v20
