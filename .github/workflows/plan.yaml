@@ -8,6 +8,9 @@ on:
       - 'konnect/**'
       - 'flake.nix'
       - 'flake.lock'
+      
+  workflow_dispatch:
+
 concurrency:
   group: terraform-plan
   cancel-in-progress: true
@@ -29,7 +32,7 @@ jobs:
     steps:
     - name: Checkout repository
       uses: actions/checkout@v4
-      
+
     - name: Install Nix
       uses: DeterminateSystems/nix-installer-action@v20
     - name: Run Magic Nix Cache
