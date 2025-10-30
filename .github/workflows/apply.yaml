@@ -1,0 +1,102 @@
+name: Terraform Apply
+
+on:
+  workflow_dispatch:
+    inputs:
+      pr_number:
+        description: 'PR number (for reference/documentation only)'
+        required: false
+        type: string
+      confirmation:
+        description: 'Type "apply" to confirm deployment'
+        required: true
+        type: string
+concurrency:
+  group: terraform-apply
+  cancel-in-progress: false
+jobs:
+  apply:
+    runs-on: self-hosted
+    permissions:
+      contents: read
+    env:
+      TF_VAR_cp_admin_token: ${{ secrets.CP_ADMIN_TOKEN }}
+      TF_VAR_id_admin_token: ${{ secrets.ID_ADMIN_TOKEN }}
+      TF_VAR_vault_role_id: ${{ secrets.vault_role_id }}
+      TF_VAR_vault_secret_id: ${{ secrets.vault_secret_id }}
+      TF_VAR_vault_pki_role_id: ${{ secrets.vault_pki_role_id }}
+      TF_VAR_vault_pki_secret_id: ${{ secrets.vault_pki_secret_id }}
+      AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
+      AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+      AWS_ENDPOINT_URL_S3: ${{ secrets.AWS_ENDPOINT_URL_S3 }}
+    steps:
+    - name: Validate confirmation
+      run: |
+        if [ "${{ github.event.inputs.confirmation }}" != "apply" ]; then
+          echo "❌ Error: You must type 'apply' to confirm deployment"
+          echo "You entered: '${{ github.event.inputs.confirmation }}'"
+          exit 1
+        fi
+        echo "✅ Confirmation validated"
+
+    - name: Log deployment info
+      run: |
+        echo "## 🚀 Terraform Apply" >> $GITHUB_STEP_SUMMARY
+        echo "" >> $GITHUB_STEP_SUMMARY
+        echo "- **Branch:** ${{ github.ref_name }}" >> $GITHUB_STEP_SUMMARY
+        echo "- **Commit:** ${{ github.sha }}" >> $GITHUB_STEP_SUMMARY
+        echo "- **Triggered by:** @${{ github.actor }}" >> $GITHUB_STEP_SUMMARY
+        if [ -n "${{ github.event.inputs.pr_number }}" ]; then
+          echo "- **Related PR:** #${{ github.event.inputs.pr_number }}" >> $GITHUB_STEP_SUMMARY
+        fi
+        echo "" >> $GITHUB_STEP_SUMMARY
+
+    - name: Checkout repository
+      uses: actions/checkout@v4
+      with:
+        ref: ${{ github.ref }}
+
+    - name: Install Nix
+      uses: cachix/install-nix-action@v31
+      with:
+        extra_nix_config: |
+          experimental-features = nix-command flakes
+
+    - name: Setup Cachix
+      uses: cachix/cachix-action@v16
+      with:
+        name: nixpkgs-terraform
+
+    - name: Run Magic Nix Cache
+      uses: DeterminateSystems/magic-nix-cache-action@v13
+
+    - name: Run Terraform Apply
+      id: apply
+      run: nix run .#ci-apply
+
+    - name: Generate Apply Summary
+      if: always()
+      run: |
+        echo "" >> $GITHUB_STEP_SUMMARY
+        echo "---" >> $GITHUB_STEP_SUMMARY
+        echo "" >> $GITHUB_STEP_SUMMARY
+        
+        if [ "${{ steps.apply.outcome }}" == "success" ]; then
+          echo "## ✅ Deployment Successful" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "Infrastructure has been successfully updated." >> $GITHUB_STEP_SUMMARY
+        else
+          echo "## ❌ Deployment Failed" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "The deployment encountered an error. Check the logs above for details." >> $GITHUB_STEP_SUMMARY
+        fi
+        echo "" >> $GITHUB_STEP_SUMMARY
+        echo "**Timestamp:** $(date -u '+%Y-%m-%d %H:%M:%S UTC')" >> $GITHUB_STEP_SUMMARY
+    - name: Upload apply logs
+      uses: actions/upload-artifact@v5
+      if: always()
+      with:
+        name: terraform-apply-${{ github.run_number }}
+        path: |
+          config.tf.json
+        retention-days: 90

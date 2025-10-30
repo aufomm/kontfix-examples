@@ -1,0 +1,96 @@
+name: Terraform Plan
+
+on:
+  pull_request:
+    branches: [ main ]
+    types: [opened, synchronize ]
+    paths:
+      - 'konnect/**'
+      - 'flake.nix'
+      - 'flake.lock'
+concurrency:
+  group: terraform-plan
+  cancel-in-progress: true
+jobs:
+  plan:
+    runs-on: self-hosted
+    permissions:
+      contents: read
+    env:
+      TF_VAR_cp_admin_token: ${{ secrets.CP_ADMIN_TOKEN }}
+      TF_VAR_id_admin_token: ${{ secrets.ID_ADMIN_TOKEN }}
+      TF_VAR_vault_role_id: ${{ secrets.vault_role_id }}
+      TF_VAR_vault_secret_id: ${{ secrets.vault_secret_id }}
+      TF_VAR_vault_pki_role_id: ${{ secrets.vault_pki_role_id }}
+      TF_VAR_vault_pki_secret_id: ${{ secrets.vault_pki_secret_id }}
+      AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
+      AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+      AWS_ENDPOINT_URL_S3: ${{ secrets.AWS_ENDPOINT_URL_S3 }}
+    steps:
+    - name: Checkout repository
+      uses: actions/checkout@v4
+    - name: Install Nix
+      uses: cachix/install-nix-action@v31
+      with:
+        extra_nix_config: |
+          experimental-features = nix-command flakes
+    - name: Setup Cachix
+      uses: cachix/cachix-action@v16
+      with:
+        name: nixpkgs-terraform
+    - name: Run Magic Nix Cache
+      uses: DeterminateSystems/magic-nix-cache-action@v13
+    - name: Run Terraform Plan
+      run: nix run .#ci-plan
+    - name: Generate Plan Summary
+      if: always()
+      run: |
+        echo "## 🏗️ Terraform Plan Summary" >> $GITHUB_STEP_SUMMARY
+        echo "" >> $GITHUB_STEP_SUMMARY
+        
+        if [ ! -f plan.json ]; then
+          echo "⚠️ Plan file not found" >> $GITHUB_STEP_SUMMARY
+          exit 0
+        fi
+        
+        # Parse plan.json for summary
+        CREATE_COUNT=$(jq '[.resource_changes[]? | select(.change.actions | contains(["create"]))] | length' plan.json)
+        UPDATE_COUNT=$(jq '[.resource_changes[]? | select(.change.actions | contains(["update"]))] | length' plan.json)
+        DELETE_COUNT=$(jq '[.resource_changes[]? | select(.change.actions | contains(["delete"]))] | length' plan.json)
+        TOTAL_COUNT=$(jq '[.resource_changes[]?] | length' plan.json)
+        
+        echo "| Action | Count |" >> $GITHUB_STEP_SUMMARY
+        echo "|--------|-------|" >> $GITHUB_STEP_SUMMARY
+        echo "| ✅ Create | $CREATE_COUNT |" >> $GITHUB_STEP_SUMMARY
+        echo "| 📝 Update | $UPDATE_COUNT |" >> $GITHUB_STEP_SUMMARY
+        echo "| ❌ Delete | $DELETE_COUNT |" >> $GITHUB_STEP_SUMMARY
+        echo "" >> $GITHUB_STEP_SUMMARY
+        
+        if [ "$TOTAL_COUNT" -eq 0 ]; then
+          echo "✅ **No changes detected.** Infrastructure is up to date." >> $GITHUB_STEP_SUMMARY
+        else
+          echo "📋 **Total Changes:** $TOTAL_COUNT resources" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "### 🔍 Changed Resources:" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          
+          # List changed resources
+          jq -r '.resource_changes[]? | 
+            if .change.actions | contains(["delete"]) then "❌"
+            elif .change.actions | contains(["create"]) then "✅"
+            else "📝" end + " `" + .address + "` - " + (.change.actions | join(", "))' \
+            plan.json >> $GITHUB_STEP_SUMMARY
+        fi
+        
+        echo "" >> $GITHUB_STEP_SUMMARY
+        echo "---" >> $GITHUB_STEP_SUMMARY
+        echo "💡 **Tip:** Download the artifact below to inspect the full plan locally" >> $GITHUB_STEP_SUMMARY
+    - name: Upload plan artifact
+      uses: actions/upload-artifact@v5
+      if: always()
+      with:
+        name: terraform-plan-${{ github.event.pull_request.number }}
+        path: |
+          tfplan
+          plan.json
+        retention-days: 30
