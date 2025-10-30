@@ -3,12 +3,12 @@ name: Terraform Plan
 on:
   pull_request:
     branches: [ main ]
-    types: [opened, synchronize ]
-    paths:
-      - 'konnect/**'
-      - 'flake.nix'
-      - 'flake.lock'
-      
+    types: [opened, synchronize, reopened]
+    # paths:
+    #   - 'konnect/**'
+    #   - 'flake.nix'
+    #   - 'flake.lock'
+
   workflow_dispatch:
 
 concurrency:
@@ -52,10 +52,10 @@ jobs:
         fi
         
         # Parse plan.json for summary
-        CREATE_COUNT=$(jq '[.resource_changes[]? | select(.change.actions | contains(["create"]))] | length' plan.json)
-        UPDATE_COUNT=$(jq '[.resource_changes[]? | select(.change.actions | contains(["update"]))] | length' plan.json)
-        DELETE_COUNT=$(jq '[.resource_changes[]? | select(.change.actions | contains(["delete"]))] | length' plan.json)
-        TOTAL_COUNT=$(jq '[.resource_changes[]?] | length' plan.json)
+        CREATE_COUNT=$(nix run nixpkgs#jq --  '[.resource_changes[]? | select(.change.actions | contains(["create"]))] | length' plan.json)
+        UPDATE_COUNT=$(nix run nixpkgs#jq --  '[.resource_changes[]? | select(.change.actions | contains(["update"]))] | length' plan.json)
+        DELETE_COUNT=$(nix run nixpkgs#jq --  '[.resource_changes[]? | select(.change.actions | contains(["delete"]))] | length' plan.json)
+        TOTAL_COUNT=$(nix run nixpkgs#jq --  '[.resource_changes[]?] | length' plan.json)
         
         echo "| Action | Count |" >> $GITHUB_STEP_SUMMARY
         echo "|--------|-------|" >> $GITHUB_STEP_SUMMARY
@@ -73,7 +73,7 @@ jobs:
           echo "" >> $GITHUB_STEP_SUMMARY
           
           # List changed resources
-          jq -r '.resource_changes[]? | 
+          nix run nixpkgs#jq --  -r '.resource_changes[]? | 
             if .change.actions | contains(["delete"]) then "❌"
             elif .change.actions | contains(["create"]) then "✅"
             else "📝" end + " `" + .address + "` - " + (.change.actions | join(", "))' \
