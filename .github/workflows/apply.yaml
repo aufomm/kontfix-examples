@@ -57,16 +57,7 @@ jobs:
         ref: ${{ github.ref }}
 
     - name: Install Nix
-      uses: cachix/install-nix-action@v31
-      with:
-        extra_nix_config: |
-          experimental-features = nix-command flakes
-
-    - name: Setup Cachix
-      uses: cachix/cachix-action@v16
-      with:
-        name: nixpkgs-terraform
-
+      uses: DeterminateSystems/nix-installer-action@v20
     - name: Run Magic Nix Cache
       uses: DeterminateSystems/magic-nix-cache-action@v13
 
