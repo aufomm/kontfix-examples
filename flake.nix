@@ -34,7 +34,9 @@
           inherit system;
           modules = [
             ./konnect/default.nix
-            ./konnect/cps.nix
+            ./konnect/us.nix
+            ./konnect/eu.nix
+            ./konnect/sg.nix
             ./konnect/s3-state.nix
           ];
         };
