@@ -6,12 +6,46 @@ This repository demonstrates how to use a CI/CD pipeline to manage [Kong Konnect
 
 This example demonstrates:
 - How to configure the Kong Konnect control plane using the Kontfix Nix module.
-- Automated CI/CD workflows.
+- Automated CI/CD workflows for infrastructure as code.
 
 ## How to use
 
-1. Review the configuration files in the `konnect/` folder.
+1. Review the configuration files in the `konnect/` folder to understand the control plane setup.
 2. Custom plugin schemas **must** be stored in `custom-plugin-schemas/` at the root level.
-3. This example breaks up control planes per region per file.
-4. Understand how to set defaults configurations for all control planes and individual overrides.
-5. Check the workflow files to see how configurations are built and applied. The workflows runs on my self-hosted runner, these actions should also work for Github runners or your own runners.
+3. This example organizes control planes by region, with one file per region.
+4. Learn how to set default configurations for all control planes and apply individual overrides.
+5. Check the workflow files (`.github/workflows/`) to see how configurations are built and applied automatically.
+6. The workflows run on self-hosted runners but are compatible with GitHub-hosted runners.
+
+## Learning from Artifacts
+
+This repository uploads the generated `config.tf.json` as artifacts in workflow runs. This is **intentionally done for educational purposes** so you can:
+- See how Nix flake configuration translates to Terraform JSON
+- Inspect the actual resource definitions
+- Learn the structure of Kong Konnect control plane configurations
+
+## Getting Started
+
+```bash
+# Clone the repository
+git clone https://github.com/aufomm/kontfix-examples.git
+
+# Set up your secrets in GitHub
+# Settings → Secrets → Actions:
+# - CP_ADMIN_TOKEN
+# - ID_ADMIN_TOKEN
+# Vault related secrets if using Vault for state and pki backends
+```
+
+## Workflow Overview
+
+### Plan Workflow (`plan.yaml`)
+- Triggers on PRs
+- Generates Terraform plan and shows summary in job output
+- Uploads plan artifacts for inspection
+
+### Apply Workflow (`apply.yaml`)
+- Auto-triggers when PR with `terraform:auto-deploy` label is merged
+- Can also be manually triggered via workflow dispatch
+- Rebuilds configuration from scratch (no artifact reuse for safety)
+- Applies changes to Kong Konnect
