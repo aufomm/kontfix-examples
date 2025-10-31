@@ -4,16 +4,16 @@ on:
   pull_request:
     branches: [ main ]
     types: [opened, synchronize, reopened]
-    # paths:
-    #   - 'konnect/**'
-    #   - 'flake.nix'
-    #   - 'flake.lock'
-
-  workflow_dispatch:
+    paths:
+      - 'konnect/**'
+      - 'custom-plugin-schemas/*'
+      - 'flake.nix'
+      - 'flake.lock'
 
 concurrency:
   group: terraform-plan
   cancel-in-progress: true
+
 jobs:
   plan:
     runs-on: self-hosted
@@ -40,6 +40,7 @@ jobs:
 
     - name: Run Terraform Plan
       run: nix run .#ci-plan
+
     - name: Generate Plan Summary
       if: always()
       run: |
@@ -83,6 +84,7 @@ jobs:
         echo "" >> $GITHUB_STEP_SUMMARY
         echo "---" >> $GITHUB_STEP_SUMMARY
         echo "💡 **Tip:** Download the artifact below to inspect the full plan locally" >> $GITHUB_STEP_SUMMARY
+        
     - name: Upload plan artifact
       uses: actions/upload-artifact@v5
       if: always()
