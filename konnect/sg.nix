@@ -29,7 +29,7 @@ in
             "chocolate"
           ];
           generate_token = true;
-          storage_backend = [ "local" ];
+          storage_backend = [ "hcv" ];
         };
       };
     };
