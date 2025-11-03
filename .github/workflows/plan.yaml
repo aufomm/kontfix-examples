@@ -82,15 +82,4 @@ jobs:
         fi
         
         echo "" >> $GITHUB_STEP_SUMMARY
-        echo "---" >> $GITHUB_STEP_SUMMARY
-        echo "💡 **Tip:** Download the artifact below to inspect the full plan locally" >> $GITHUB_STEP_SUMMARY
-        
-    - name: Upload plan artifact
-      uses: actions/upload-artifact@v5
-      if: always()
-      with:
-        name: terraform-plan-${{ github.event.pull_request.number }}
-        path: |
-          tfplan
-          plan.json
-        retention-days: 30
+        echo "---" >> $GITHUB_STEP_SUMMARY >> $GITHUB_STEP_SUMMARY

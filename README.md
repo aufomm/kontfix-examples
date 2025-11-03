@@ -42,7 +42,6 @@ git clone https://github.com/aufomm/kontfix-examples.git
 ### Plan Workflow (`plan.yaml`)
 - Triggers on PRs
 - Generates Terraform plan and shows summary in job output
-- Uploads plan artifacts for inspection
 
 ### Apply Workflow (`apply.yaml`)
 - Auto-triggers when PR with `terraform:auto-deploy` label is merged
