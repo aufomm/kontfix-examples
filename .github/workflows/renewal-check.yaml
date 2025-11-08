@@ -3,7 +3,7 @@ name: Daily Renewal Check
 on:
   schedule:
     # Run every day at 9:00 AM UTC
-    - cron: "0 10 * * *"
+    - cron: "0 13 * * *"
   workflow_dispatch:
 
 concurrency:
@@ -255,4 +255,4 @@ jobs:
           echo "- ✅ Vault PKI certificates: All valid with auto-renew working" >> $GITHUB_STEP_SUMMARY
           echo "- ✅ No manual intervention required" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
-          echo "Next check: Tomorrow at 9:00 AM UTC" >> $GITHUB_STEP_SUMMARY
+          echo "Next check: Tomorrow at 1:00 PM UTC" >> $GITHUB_STEP_SUMMARY
