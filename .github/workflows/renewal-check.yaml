@@ -16,6 +16,7 @@ jobs:
     permissions:
       contents: read
       actions: read
+      issues: write
     env:
       TF_VAR_cp_admin_token: ${{ secrets.CP_ADMIN_TOKEN }}
       TF_VAR_id_admin_token: ${{ secrets.ID_ADMIN_TOKEN }}
@@ -52,23 +53,17 @@ jobs:
 
           echo "✅ Plan generated successfully"
 
-      - name: Parse Certificate Renewal Changes
+      - name: Parse Token and Certificate Changes
         id: parse-changes
         run: |
-          echo "📊 Analyzing plan for certificate renewal changes..."
+          echo "📊 Analyzing plan for token rotations and certificate renewals..."
 
           # Parse plan.json for TLS self-signed certificates that need replacement
           TLS_RENEWALS=$(nix run nixpkgs#jq -- -r '
             .resource_changes[]? |
             select(.change.actions | contains(["delete", "create"])) |
             select(.address | test("tls_self_signed_cert")) |
-            {
-              address: .address,
-              type: .type,
-              name: .name,
-              previous_values: .change.before,
-              planned_values: .change.after
-            }
+            .address
           ' plan.json)
 
           # Parse for Vault PKI certificates with auto_renew
@@ -76,99 +71,183 @@ jobs:
             .resource_changes[]? |
             select(.change.actions | contains(["update"])) |
             select(.address | test("vault_pki_secret_backend_cert")) |
-            {
-              address: .address,
-              type: .type,
-              name: .name,
-              changes: .change.after
-            }
+            .address
           ' plan.json)
 
-          # Check if we have any certificate renewal changes
+          # Parse for Konnect system account access token rotations
+          TOKEN_ROTATIONS=$(nix run nixpkgs#jq -- -r '
+            .resource_changes[]? |
+            select(.change.actions | contains(["delete", "create"])) |
+            select(.address | test("konnect_system_account_access_token")) |
+            .address
+          ' plan.json)
+
+          # Set variables for detection
           if [[ -n "$TLS_RENEWALS" || -n "$VAULT_RENEWALS" ]]; then
+            renewal_detected="true"
             echo "renewal_detected=true" >> $GITHUB_OUTPUT
             echo "🔄 Certificate renewal changes detected!"
-
             if [[ -n "$TLS_RENEWALS" ]]; then
-              echo "tls_renewals=true" >> $GITHUB_OUTPUT
-              echo "🔐 TLS self-signed certificates needing renewal:"
-              echo "$TLS_RENEWALS" | nix run nixpkgs#jq -- -r '"  - \(.address) (\(.type))"'
+              {
+                echo "TLS_RENEWALS<<EOF"
+                echo "$TLS_RENEWALS"
+                echo "EOF"
+              } >> $GITHUB_OUTPUT
             fi
-
             if [[ -n "$VAULT_RENEWALS" ]]; then
-              echo "vault_renewals=true" >> $GITHUB_OUTPUT
-              echo "🔐 Vault PKI certificates needing renewal:"
-              echo "$VAULT_RENEWALS" | nix run nixpkgs#jq -- -r '"  - \(.address) (\(.type))"'
+              {
+                echo "VAULT_RENEWALS<<EOF"
+                echo "$VAULT_RENEWALS"
+                echo "EOF"
+              } >> $GITHUB_OUTPUT
             fi
           else
+            renewal_detected="false"
             echo "renewal_detected=false" >> $GITHUB_OUTPUT
-            echo "✅ No certificate renewal changes detected"
           fi
 
-      - name: Generate Certificate Renewal Summary
-        if: steps.parse-changes.outputs.renewal_detected == 'true'
+          if [[ -n "$TOKEN_ROTATIONS" ]]; then
+            token_rotation_detected="true"
+            echo "token_rotation_detected=true" >> $GITHUB_OUTPUT
+            {
+              echo "TOKEN_ROTATIONS<<EOF"
+              echo "$TOKEN_ROTATIONS"
+              echo "EOF"
+            } >> $GITHUB_OUTPUT
+            echo "🔄 Token rotation changes detected!"
+            echo "🔑 Konnect tokens needing rotation:"
+            echo "$TOKEN_ROTATIONS" | while IFS= read -r token; do
+              echo "  - $token"
+            done
+          else
+            token_rotation_detected="false"
+            echo "token_rotation_detected=false" >> $GITHUB_OUTPUT
+          fi
+
+          # Determine the action needed using properly set local bash variables
+          if [[ "$renewal_detected" == "false" && "$token_rotation_detected" == "true" ]]; then
+            echo "action=auto_rotate_tokens" >> $GITHUB_OUTPUT
+            echo "🎯 Action: Automatic token rotation (no certificate changes)"
+          elif [[ "$renewal_detected" == "true" ]]; then
+            echo "action=manual_issue" >> $GITHUB_OUTPUT
+            echo "🎯 Action: Create issue for manual review (includes both tokens and certificates)"
+          else
+            echo "action=no_changes" >> $GITHUB_OUTPUT
+            echo "🎯 Action: No changes needed"
+          fi
+
+      - name: Automatic Token Rotation
+        if: steps.parse-changes.outputs.action == 'auto_rotate_tokens'
         run: |
-          echo "## 🔐 Certificate Renewal Alert" >> $GITHUB_STEP_SUMMARY
+          echo "## 🔑 Automatic Token Rotation" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
           echo "**Date:** $(date -u '+%Y-%m-%d %H:%M:%S UTC')" >> $GITHUB_STEP_SUMMARY
           echo "**Repository:** ${{ github.repository }}" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
 
-          echo "### 📋 Certificate Renewal Details" >> $GITHUB_STEP_SUMMARY
+          echo "### 📋 Tokens Being Rotated" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "| Resource | Action | Status |" >> $GITHUB_STEP_SUMMARY
+          echo "|----------|--------|--------|" >> $GITHUB_STEP_SUMMARY
+
+          # Use the already parsed token data
+          echo "${{ steps.parse-changes.outputs.TOKEN_ROTATIONS }}" | while IFS= read -r token; do
+            if [[ -n "$token" ]]; then
+              echo "| $token | konnect_system_account_access_token | Automatic rotation |" >> $GITHUB_STEP_SUMMARY
+            fi
+          done
           echo "" >> $GITHUB_STEP_SUMMARY
 
-          # List TLS certificates needing renewal
-          if [[ "${{ steps.parse-changes.outputs.tls_renewals }}" == "true" ]]; then
-            echo "**TLS Self-Signed Certificates:**" >> $GITHUB_STEP_SUMMARY
-            echo "The following TLS certificates are scheduled for renewal due to rotation triggers:" >> $GITHUB_STEP_SUMMARY
-            echo "" >> $GITHUB_STEP_SUMMARY
+          echo "🔄 **Applying token rotation...**" >> $GITHUB_STEP_SUMMARY
+          echo "This is a safe automatic rotation - no certificate changes detected." >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
 
-            nix run nixpkgs#jq -- -r '
-              .resource_changes[]? |
-              select(.change.actions | contains(["delete", "create"])) |
-              select(.address | test("tls_self_signed_cert")) |
-              "| \(.address) | \(.type) | Will be replaced |"
-            ' plan.json >> $GITHUB_STEP_SUMMARY
+          echo "✅ **Starting token rotation...**"
+          nix run .#ci-apply
+
+          echo "🎉 **Token rotation completed successfully!**" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "---" >> $GITHUB_STEP_SUMMARY
+
+      - name: Generate Manual Renewal Summary
+        if: steps.parse-changes.outputs.action == 'manual_issue'
+        run: |
+          echo "## 🔐 Manual Renewal Required" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "**Date:** $(date -u '+%Y-%m-%d %H:%M:%S UTC')" >> $GITHUB_STEP_SUMMARY
+          echo "**Repository:** ${{ github.repository }}" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+
+          # Show tokens if they need rotation
+          if [[ "${{ steps.parse-changes.outputs.token_rotation_detected }}" == "true" ]]; then
+            echo "### 🔑 Tokens Requiring Rotation" >> $GITHUB_STEP_SUMMARY
+            echo "" >> $GITHUB_STEP_SUMMARY
+            echo "| Resource | Action | Status |" >> $GITHUB_STEP_SUMMARY
+            echo "|----------|--------|--------|" >> $GITHUB_STEP_SUMMARY
+
+            echo "${{ steps.parse-changes.outputs.TOKEN_ROTATIONS }}" | while IFS= read -r token; do
+              if [[ -n "$token" ]]; then
+                echo "| $token | konnect_system_account_access_token | Manual rotation required |" >> $GITHUB_STEP_SUMMARY
+              fi
+            done
             echo "" >> $GITHUB_STEP_SUMMARY
           fi
 
-          # List Vault certificates needing renewal
-          if [[ "${{ steps.parse-changes.outputs.vault_renewals }}" == "true" ]]; then
-            echo "**Vault PKI Certificates:**" >> $GITHUB_STEP_SUMMARY
-            echo "The following Vault certificates are due for renewal:" >> $GITHUB_STEP_SUMMARY
+          # Show certificates if they need renewal
+          if [[ "${{ steps.parse-changes.outputs.renewal_detected }}" == "true" ]]; then
+            echo "### 🔐 Certificates Requiring Renewal" >> $GITHUB_STEP_SUMMARY
             echo "" >> $GITHUB_STEP_SUMMARY
 
-            nix run nixpkgs#jq -- -r '
-              .resource_changes[]? |
-              select(.change.actions | contains(["update"])) |
-              select(.address | test("vault_pki_secret_backend_cert")) |
-              "| \(.address) | \(.type) | Auto-renew triggered |"
-            ' plan.json >> $GITHUB_STEP_SUMMARY
-            echo "" >> $GITHUB_STEP_SUMMARY
+            # TLS certificates
+            if [[ -n "${{ steps.parse-changes.outputs.TLS_RENEWALS }}" ]]; then
+              echo "**TLS Self-Signed Certificates:**" >> $GITHUB_STEP_SUMMARY
+              echo "" >> $GITHUB_STEP_SUMMARY
+              echo "${{ steps.parse-changes.outputs.TLS_RENEWALS }}" | while IFS= read -r cert; do
+                if [[ -n "$cert" ]]; then
+                  echo "| $cert | tls_self_signed_cert | Manual renewal required |" >> $GITHUB_STEP_SUMMARY
+                fi
+              done
+              echo "" >> $GITHUB_STEP_SUMMARY
+            fi
+
+            # Vault certificates
+            if [[ -n "${{ steps.parse-changes.outputs.VAULT_RENEWALS }}" ]]; then
+              echo "**Vault PKI Certificates:**" >> $GITHUB_STEP_SUMMARY
+              echo "" >> $GITHUB_STEP_SUMMARY
+              echo "${{ steps.parse-changes.outputs.VAULT_RENEWALS }}" | while IFS= read -r cert; do
+                if [[ -n "$cert" ]]; then
+                  echo "| $cert | vault_pki_secret_backend_cert | Manual renewal required |" >> $GITHUB_STEP_SUMMARY
+                fi
+              done
+              echo "" >> $GITHUB_STEP_SUMMARY
+            fi
           fi
 
           echo "### 🎯 Next Steps" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
-          echo "1. **Review the certificate changes** above" >> $GITHUB_STEP_SUMMARY
-          echo "2. **Manual intervention required** - run the apply workflow to renew these certificates" >> $GITHUB_STEP_SUMMARY
-          echo "3. **Monitor** the renewal process after application" >> $GITHUB_STEP_SUMMARY
+          echo "⚠️ **Manual intervention required** - review all changes above" >> $GITHUB_STEP_SUMMARY
+          echo "1. **Manual Apply** - Run the apply workflow to rotate tokens and renew certificates" >> $GITHUB_STEP_SUMMARY
+          echo "2. **Monitor** the rotation and renewal process after application" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
           echo "---" >> $GITHUB_STEP_SUMMARY
 
-      - name: Create GitHub Issue for Certificate Renewal
-        if: steps.parse-changes.outputs.renewal_detected == 'true'
+      
+      - name: Create GitHub Issue for Manual Renewal
+        if: steps.parse-changes.outputs.action == 'manual_issue'
         uses: actions/github-script@v7
         with:
           script: |
-            // Build certificate details
+            // Build details from parsed data
             let tlsDetails = '';
             let vaultDetails = '';
+            let tokenDetails = '';
+            let titlePrefix = '🔐 Manual Renewal Required';
 
             const fs = require('fs');
             const planJson = fs.readFileSync('plan.json', 'utf8');
             const plan = JSON.parse(planJson);
 
-            // Parse TLS certificates
+            // Parse TLS certificates from plan
             const tlsCerts = plan.resource_changes?.filter(rc =>
               rc.change.actions.includes('delete') &&
               rc.change.actions.includes('create') &&
@@ -179,10 +258,11 @@ jobs:
               tlsDetails = `
                 🔐 **TLS Self-Signed Certificates:**
                 ${tlsCerts.map(rc => `- \`${rc.address}\``).join('\n')}
+
               `;
             }
 
-            // Parse Vault certificates
+            // Parse Vault certificates from plan
             const vaultCerts = plan.resource_changes?.filter(rc =>
               rc.change.actions.includes('update') &&
               rc.address.includes('vault_pki_secret_backend_cert')
@@ -192,46 +272,72 @@ jobs:
               vaultDetails = `
                 🔐 **Vault PKI Certificates:**
                 ${vaultCerts.map(rc => `- \`${rc.address}\``).join('\n')}
+
               `;
+            }
+
+            // Parse tokens from plan
+            const tokenCerts = plan.resource_changes?.filter(rc =>
+              rc.change.actions.includes('delete') &&
+              rc.change.actions.includes('create') &&
+              rc.address.includes('konnect_system_account_access_token')
+            ) || [];
+
+            if (tokenCerts.length > 0) {
+              tokenDetails = `
+                🔑 **Tokens Requiring Rotation:**
+                ${tokenCerts.map(rc => `- \`${rc.address}\``).join('\n')}
+
+              `;
+            }
+
+            // Determine title based on what needs renewal
+            if (tokenCerts.length > 0 && (tlsCerts.length > 0 || vaultCerts.length > 0)) {
+              titlePrefix = '🔄 Mixed Renewal - Tokens + Certificates';
+            } else if (tokenCerts.length > 0) {
+              titlePrefix = '🔑 Token Rotation Required';
+            } else {
+              titlePrefix = '🔐 Certificate Renewal Required';
             }
 
             // Create the issue
             await github.rest.issues.create({
               owner: context.repo.owner,
               repo: context.repo.repo,
-              title: `🔐 Certificate Renewal Required - ${new Date().toISOString().split('T')[0]}`,
+              title: `${titlePrefix} - ${new Date().toISOString().split('T')[0]}`,
               labels: ['infrastructure', 'certificates', 'automation'],
               body: `
-                ## 🔐 Certificate Renewal Alert
+                ## ${titlePrefix}
 
                 **Date:** ${new Date().toISOString()}
                 **Repository:** ${context.repo.owner}/${context.repo.repo}
                 **Workflow:** [View Details](${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }})
 
-                ### 📋 Certificates Needing Renewal
+                ### 📋 Resources Requiring Attention
 
+                ${tokenDetails}
                 ${tlsDetails}
-
                 ${vaultDetails}
 
                 ### 🎯 Required Actions
 
-                1. **Review** the certificate changes above
-                2. **Manual Apply** - Run the apply workflow to renew these certificates
-                3. **Monitor** - Verify successful renewal after application
+                1. **Review** all the changes above
+                2. **Manual Apply** - Run the apply workflow to rotate tokens and renew certificates
+                3. **Monitor** - Verify successful rotation and renewal after application
 
                 ### 🔄 Next Steps
 
-                - [ ] Run the apply workflow to renew certificates
-                - [ ] Monitor the renewal process
-                - [ ] Verify all certificates are successfully renewed
+                - [ ] Run the apply workflow to handle all renewals
+                - [ ] Monitor the rotation and renewal process
+                - [ ] Verify all resources are successfully updated
                 - [ ] Close this issue once completed
 
                 ### 📊 Summary
 
-                **Total certificates needing renewal:** ${tlsCerts.length + vaultCerts.length}
-                - TLS Self-Signed: ${tlsCerts.length}
-                - Vault PKI: ${vaultCerts.length}
+                **Total resources needing attention:** ${tokenCerts.length + tlsCerts.length + vaultCerts.length}
+                ${tokenCerts.length > 0 ? `- Konnect Tokens: ${tokenCerts.length}` : ''}
+                ${tlsCerts.length > 0 ? `- TLS Self-Signed: ${tlsCerts.length}` : ''}
+                ${vaultCerts.length > 0 ? `- Vault PKI: ${vaultCerts.length}` : ''}
 
                 ---
                 🤖 *This issue was automatically created by GitHub Actions*
@@ -239,20 +345,21 @@ jobs:
               `.trim()
             });
 
-            console.log(`✅ Created issue for ${tlsCerts.length + vaultCerts.length} certificate renewals`);
+            console.log(`✅ Created issue for ${tokenCerts.length + tlsCerts.length + vaultCerts.length} resource renewals`);
 
       - name: No Renewals Needed
-        if: steps.parse-changes.outputs.renewal_detected == 'false'
+        if: steps.parse-changes.outputs.token_rotation_detected == 'false' && steps.parse-changes.outputs.renewal_detected == 'false'
         run: |
-          echo "## ✅ All Certificates Up to Date" >> $GITHUB_STEP_SUMMARY
+          echo "## ✅ All Certificates and Tokens Up to Date" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
           echo "**Date:** $(date -u '+%Y-%m-%d %H:%M:%S UTC')" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
-          echo "🎉 **Good news!** No certificate renewals are needed at this time." >> $GITHUB_STEP_SUMMARY
+          echo "🎉 **Good news!** No certificate renewals or token rotations are needed at this time." >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
           echo "### 📊 Summary" >> $GITHUB_STEP_SUMMARY
           echo "- ✅ TLS self-signed certificates: All within rotation period" >> $GITHUB_STEP_SUMMARY
           echo "- ✅ Vault PKI certificates: All valid with auto-renew working" >> $GITHUB_STEP_SUMMARY
+          echo "- ✅ Konnect access tokens: All within rotation period" >> $GITHUB_STEP_SUMMARY
           echo "- ✅ No manual intervention required" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
           echo "Next check: Tomorrow at 1:00 PM UTC" >> $GITHUB_STEP_SUMMARY
