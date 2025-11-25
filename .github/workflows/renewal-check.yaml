@@ -66,10 +66,10 @@ jobs:
             .address
           ' plan.json)
 
-          # Parse for Vault PKI certificates with auto_renew
+          # Parse for Vault PKI certificates with auto_renew or replacement
           VAULT_RENEWALS=$(nix run nixpkgs#jq -- -r '
             .resource_changes[]? |
-            select(.change.actions | contains(["update"])) |
+            select((.change.actions | contains(["update"])) or (.change.actions | contains(["delete", "create"]))) |
             select(.address | test("vault_pki_secret_backend_cert")) |
             .address
           ' plan.json)
@@ -255,25 +255,18 @@ jobs:
             ) || [];
 
             if (tlsCerts.length > 0) {
-              tlsDetails = `
-                🔐 **TLS Self-Signed Certificates:**
-                ${tlsCerts.map(rc => `- \`${rc.address}\``).join('\n')}
-
-              `;
+              tlsDetails = `🔐 **TLS Self-Signed Certificates:**\n${tlsCerts.map(rc => `- ${rc.address}`).join('\n')}\n`;
             }
 
             // Parse Vault certificates from plan
             const vaultCerts = plan.resource_changes?.filter(rc =>
-              rc.change.actions.includes('update') &&
+              (rc.change.actions.includes('update') ||
+               (rc.change.actions.includes('delete') && rc.change.actions.includes('create'))) &&
               rc.address.includes('vault_pki_secret_backend_cert')
             ) || [];
 
             if (vaultCerts.length > 0) {
-              vaultDetails = `
-                🔐 **Vault PKI Certificates:**
-                ${vaultCerts.map(rc => `- \`${rc.address}\``).join('\n')}
-
-              `;
+              vaultDetails = `🔐 **Vault PKI Certificates:**\n${vaultCerts.map(rc => `- ${rc.address}`).join('\n')}\n`;
             }
 
             // Parse tokens from plan
@@ -301,48 +294,16 @@ jobs:
             }
 
             // Create the issue
+            const workflowUrl = '${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}';
+
+            const issueBody = `## ${titlePrefix}\n\n**Date:** ${new Date().toISOString()}\n**Repository:** ${context.repo.owner}/${context.repo.repo}\n**Workflow:** [View Details](${workflowUrl})\n\n### 📋 Resources Requiring Attention\n\n${tokenDetails}\n${tlsDetails}\n${vaultDetails}\n\n### 🎯 Required Actions\n\n1. **Review** all the changes above\n2. **Manual Apply** - Run the apply workflow to rotate tokens and renew certificates\n3. **Monitor** - Verify successful rotation and renewal after application\n\n### 🔄 Next Steps\n\n- [ ] Run the apply workflow to handle all renewals\n- [ ] Monitor the rotation and renewal process\n- [ ] Verify all resources are successfully updated\n- [ ] Close this issue once completed\n\n### 📊 Summary\n\n**Total resources needing attention:** ${tokenCerts.length + tlsCerts.length + vaultCerts.length}\n${tokenCerts.length > 0 ? `- Konnect Tokens: ${tokenCerts.length}` : ''}\n${tlsCerts.length > 0 ? `- TLS Self-Signed: ${tlsCerts.length}` : ''}\n${vaultCerts.length > 0 ? `- Vault PKI: ${vaultCerts.length}` : ''}\n\n---\n🤖 *This issue was automatically created by GitHub Actions*\n*Last check: ${new Date().toISOString()}*`;
+
             await github.rest.issues.create({
               owner: context.repo.owner,
               repo: context.repo.repo,
               title: `${titlePrefix} - ${new Date().toISOString().split('T')[0]}`,
               labels: ['infrastructure', 'certificates', 'automation'],
-              body: `
-                ## ${titlePrefix}
-
-                **Date:** ${new Date().toISOString()}
-                **Repository:** ${context.repo.owner}/${context.repo.repo}
-                **Workflow:** [View Details](${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }})
-
-                ### 📋 Resources Requiring Attention
-
-                ${tokenDetails}
-                ${tlsDetails}
-                ${vaultDetails}
-
-                ### 🎯 Required Actions
-
-                1. **Review** all the changes above
-                2. **Manual Apply** - Run the apply workflow to rotate tokens and renew certificates
-                3. **Monitor** - Verify successful rotation and renewal after application
-
-                ### 🔄 Next Steps
-
-                - [ ] Run the apply workflow to handle all renewals
-                - [ ] Monitor the rotation and renewal process
-                - [ ] Verify all resources are successfully updated
-                - [ ] Close this issue once completed
-
-                ### 📊 Summary
-
-                **Total resources needing attention:** ${tokenCerts.length + tlsCerts.length + vaultCerts.length}
-                ${tokenCerts.length > 0 ? `- Konnect Tokens: ${tokenCerts.length}` : ''}
-                ${tlsCerts.length > 0 ? `- TLS Self-Signed: ${tlsCerts.length}` : ''}
-                ${vaultCerts.length > 0 ? `- Vault PKI: ${vaultCerts.length}` : ''}
-
-                ---
-                🤖 *This issue was automatically created by GitHub Actions*
-                *Last check: ${new Date().toISOString()}*
-              `.trim()
+              body: issueBody.trim()
             });
 
             console.log(`✅ Created issue for ${tokenCerts.length + tlsCerts.length + vaultCerts.length} resource renewals`);
