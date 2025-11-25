@@ -21,6 +21,9 @@ on:
       - "flake.lock"
       - "custom-plugin-schemas/*"
 
+  issues:
+    types: [closed]
+
 concurrency:
   group: terraform-apply
   cancel-in-progress: false
@@ -29,13 +32,16 @@ jobs:
   apply:
     runs-on: self-hosted
     if: |
-      (github.event_name == 'pull_request' && 
+      (github.event_name == 'pull_request' &&
        github.event.pull_request.merged == true &&
        contains(github.event.pull_request.labels.*.name, 'terraform:auto-deploy')) ||
+      (github.event_name == 'issues' &&
+       contains(github.event.issue.labels.*.name, 'terraform:auto-deploy')) ||
       (github.event_name == 'workflow_dispatch')
     permissions:
       contents: read
       pull-requests: read
+      issues: read
     env:
       TF_VAR_cp_admin_token: ${{ secrets.CP_ADMIN_TOKEN }}
       TF_VAR_id_admin_token: ${{ secrets.ID_ADMIN_TOKEN }}
@@ -65,10 +71,14 @@ jobs:
           echo "- **Branch:** ${{ github.ref_name }}" >> $GITHUB_STEP_SUMMARY
           echo "- **Commit:** ${{ github.sha }}" >> $GITHUB_STEP_SUMMARY
           echo "- **Triggered by:** @${{ github.actor }}" >> $GITHUB_STEP_SUMMARY
-          
+
           if [ "${{ github.event_name }}" == "pull_request" ]; then
             echo "- **PR:** #${{ github.event.pull_request.number }}" >> $GITHUB_STEP_SUMMARY
             echo "- **PR Title:** ${{ github.event.pull_request.title }}" >> $GITHUB_STEP_SUMMARY
+            echo "- **Deploy Mode:** 🤖 Automatic (label-triggered)" >> $GITHUB_STEP_SUMMARY
+          elif [ "${{ github.event_name }}" == "issues" ]; then
+            echo "- **Issue:** #${{ github.event.issue.number }}" >> $GITHUB_STEP_SUMMARY
+            echo "- **Issue Title:** ${{ github.event.issue.title }}" >> $GITHUB_STEP_SUMMARY
             echo "- **Deploy Mode:** 🤖 Automatic (label-triggered)" >> $GITHUB_STEP_SUMMARY
           elif [ -n "${{ github.event.inputs.pr_number }}" ]; then
             echo "- **Related PR:** #${{ github.event.inputs.pr_number }}" >> $GITHUB_STEP_SUMMARY
@@ -116,7 +126,7 @@ jobs:
         uses: actions/upload-artifact@v5
         if: always()
         with:
-          name: terraform-apply-${{ github.event.pull_request.number || github.run_number }}
+          name: terraform-apply-${{ github.event.pull_request.number || github.event.issue.number || github.run_number }}
           path: |
             config.tf.json
           retention-days: 90
