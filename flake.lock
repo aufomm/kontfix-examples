@@ -29,11 +29,11 @@
         "terranix": "terranix"
       },
       "locked": {
-        "lastModified": 1764978730,
-        "narHash": "sha256-Wq/ngYcaELsP+NFlnA/ICzWANbGVCXr+sckQMOdoSbU=",
+        "lastModified": 1765020635,
+        "narHash": "sha256-+u+qFN7Yh9aAx2Jn1G4Imt6hdk5/cMa8Co+tzQ6YzLg=",
         "owner": "liyangau",
         "repo": "kontfix",
-        "rev": "fcb4f1ee93cc9d419c3c953d8d38a47bf6e4346f",
+        "rev": "f116a5697669643e46550b74353c4e6aff46079b",
         "type": "github"
       },
       "original": {
@@ -128,11 +128,11 @@
     },
     "nixpkgs_3": {
       "locked": {
-        "lastModified": 1764915887,
-        "narHash": "sha256-CeBCJ9BMsuzVgn8GVfuSRZ6xeau7szzG0Xn6O/OxP9M=",
+        "lastModified": 1764947035,
+        "narHash": "sha256-EYHSjVM4Ox4lvCXUMiKKs2vETUSL5mx+J2FfutM7T9w=",
         "owner": "nixos",
         "repo": "nixpkgs",
-        "rev": "42e29df35be6ef54091d3a3b4e97056ce0a98ce8",
+        "rev": "a672be65651c80d3f592a89b3945466584a22069",
         "type": "github"
       },
       "original": {
