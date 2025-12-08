@@ -12,18 +12,15 @@ in
         timtam = {
           auth_type = "pinned_client_certs";
           create_certificate = true;
-          upload_ca_certificate = true;
           cluster_type = "CLUSTER_TYPE_K8S_INGRESS_CONTROLLER";
         };
         marshmallow = {
           labels = commonLabels;
           create_certificate = true;
-          upload_ca_certificate = true;
         };
         chocolate = {
           labels = commonLabels;
           create_certificate = true;
-          upload_ca_certificate = true;
         };
       };
     };

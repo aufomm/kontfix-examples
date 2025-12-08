@@ -5,7 +5,6 @@
         dev = {
           description = "dev control plane";
           create_certificate = true;
-          upload_ca_certificate = true;
           custom_plugins = [ "path-prefix" ];
           system_account = {
             enable = true;
@@ -21,7 +20,6 @@
           description = "staging control plane";
           custom_plugins = [ "path-prefix" ];
           create_certificate = true;
-          upload_ca_certificate = true;
           system_account = {
             enable = true;
             generate_token = true;

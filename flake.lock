@@ -29,11 +29,11 @@
         "terranix": "terranix"
       },
       "locked": {
-        "lastModified": 1765086914,
-        "narHash": "sha256-wrdKnYQbCe8mgSt4ocp5vP0oKLkM7mdxFJAcXnmAo6M=",
+        "lastModified": 1765160532,
+        "narHash": "sha256-czEnYwITVoY6BIx1cUhHCauS68Zp02qFDw2JUbGml4o=",
         "owner": "liyangau",
         "repo": "kontfix",
-        "rev": "9c330ae5873725d3b50b87b1dd3a0ac0c281343a",
+        "rev": "c388349b54d122a80992f58a3eb6eb671f594ed7",
         "type": "github"
       },
       "original": {
