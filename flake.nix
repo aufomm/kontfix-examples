@@ -36,6 +36,7 @@
             ./konnect/us.nix
             ./konnect/eu.nix
             ./konnect/sg.nix
+            ./konnect/au.nix
             ./konnect/s3-state.nix
           ];
         };

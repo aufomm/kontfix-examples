@@ -29,11 +29,11 @@
         "terranix": "terranix"
       },
       "locked": {
-        "lastModified": 1765280857,
-        "narHash": "sha256-19RxjfPDjCtnEu3rlYhEeNU2Oxd0zixu7AoTWq1gi+w=",
+        "lastModified": 1765458745,
+        "narHash": "sha256-l58Ep0p+gZzVWfJ6SnP+FieNOi9BTjtrRXlc5eyM4bM=",
         "owner": "liyangau",
         "repo": "kontfix",
-        "rev": "b84cdf933a43fc93b6b916d01b0caaba59a79a21",
+        "rev": "870919ee71bf19a0bfaae4291c41a07e30f3769b",
         "type": "github"
       },
       "original": {
@@ -98,11 +98,11 @@
         "systems": "systems_3"
       },
       "locked": {
-        "lastModified": 1764787352,
-        "narHash": "sha256-21fvkOqU3Nm+PjMFjDqu+6kjy5Q/EP+aZLMSToPkcOQ=",
+        "lastModified": 1766020684,
+        "narHash": "sha256-lwIDPF2/XXVa/WqKaS3dCztD4wFdPI3rGf9l2VpjU+o=",
         "owner": "stackbuilders",
         "repo": "nixpkgs-terraform",
-        "rev": "377acaa99247cf9a8c19bb66c190462b4a44813b",
+        "rev": "f0bff994d7ef011e469c474b38eb1d71323199fb",
         "type": "github"
       },
       "original": {
@@ -128,11 +128,11 @@
     },
     "nixpkgs_3": {
       "locked": {
-        "lastModified": 1764947035,
-        "narHash": "sha256-EYHSjVM4Ox4lvCXUMiKKs2vETUSL5mx+J2FfutM7T9w=",
+        "lastModified": 1766125104,
+        "narHash": "sha256-l/YGrEpLromL4viUo5GmFH3K5M1j0Mb9O+LiaeCPWEM=",
         "owner": "nixos",
         "repo": "nixpkgs",
-        "rev": "a672be65651c80d3f592a89b3945466584a22069",
+        "rev": "7d853e518814cca2a657b72eeba67ae20ebf7059",
         "type": "github"
       },
       "original": {
