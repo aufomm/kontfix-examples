@@ -27,6 +27,17 @@ in
             generate_token = true;
           };
         };
+        exp = {
+          description = "Control plane used to in local machine";
+          create_certificate = true;
+          labels = {
+            environment = "local";
+          };
+          system_account = {
+            enable = true;
+            generate_token = true;
+          };
+        };
       };
     };
   };
