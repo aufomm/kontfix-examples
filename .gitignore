@@ -5,3 +5,4 @@
 .terraform.lock.hcl
 config.tf.json
 .secrets
+aws

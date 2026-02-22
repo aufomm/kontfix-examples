@@ -26,7 +26,7 @@
             pkgs = nixpkgs.legacyPackages.${system};
           }
         );
-      tf_version = "terraform-1.13.4";
+      tf_version = "terraform-1.14.4";
       terraformConfiguration =
         system:
         kontfix.lib.kontfixConfiguration {
