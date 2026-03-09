@@ -38,6 +38,16 @@ in
             generate_token = true;
           };
         };
+        k0s = {
+          description = "Control plane used for k0s cluster";
+          create_certificate = true;
+          auth_type = "pinned_client_certs";
+          cluster_type = "CLUSTER_TYPE_K8S_INGRESS_CONTROLLER";
+          labels = {
+            environment = "local";
+            platform = "kubernetes";
+          };
+        };
       };
     };
   };
