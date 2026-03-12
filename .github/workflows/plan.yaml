@@ -2,13 +2,13 @@ name: Terraform Plan
 
 on:
   pull_request:
-    branches: [ main ]
+    branches: [main]
     types: [opened, synchronize, reopened]
     paths:
-      - 'konnect/**'
-      - 'custom-plugin-schemas/*'
-      - 'flake.nix'
-      - 'flake.lock'
+      - "konnect/**"
+      - "custom-plugin-schemas/*"
+      - "flake.nix"
+      - "flake.lock"
 
 concurrency:
   group: terraform-plan
@@ -30,56 +30,69 @@ jobs:
       AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
       AWS_ENDPOINT_URL_S3: ${{ secrets.AWS_ENDPOINT_URL_S3 }}
     steps:
-    - name: Checkout repository
-      uses: actions/checkout@v4
+      - name: Checkout repository
+        uses: actions/checkout@v4
 
-    - name: Install Nix
-      uses: DeterminateSystems/nix-installer-action@v20
-    - name: Run Magic Nix Cache
-      uses: DeterminateSystems/magic-nix-cache-action@v13
+      - name: Install Nix
+        uses: cachix/install-nix-action@v31
+        with:
+          extra_nix_config: |
+            experimental-features = nix-command flakes
 
-    - name: Run Terraform Plan
-      run: nix run .#ci-plan
+      - name: Cache Nix store
+        uses: nix-community/cache-nix-action@v7
+        with:
+          primary-key: nix-${{ runner.os }}-${{ hashFiles('konnect/*.nix', 'custom-plugin-schemas/*','**/flake.lock') }}
+          restore-prefixes-first-match: nix-${{ runner.os }}-
+          gc-max-store-size-linux: 1G
+          purge: true
+          purge-prefixes: nix-${{ runner.os }}-
+          purge-created: 0
+          purge-last-accessed: 0
+          purge-primary-key: never
 
-    - name: Generate Plan Summary
-      if: always()
-      run: |
-        echo "## 🏗️ Terraform Plan Summary" >> $GITHUB_STEP_SUMMARY
-        echo "" >> $GITHUB_STEP_SUMMARY
-        
-        if [ ! -f plan.json ]; then
-          echo "⚠️ Plan file not found" >> $GITHUB_STEP_SUMMARY
-          exit 0
-        fi
-        
-        # Parse plan.json for summary
-        CREATE_COUNT=$(nix run nixpkgs#jq --  '[.resource_changes[]? | select(.change.actions | contains(["create"]))] | length' plan.json)
-        UPDATE_COUNT=$(nix run nixpkgs#jq --  '[.resource_changes[]? | select(.change.actions | contains(["update"]))] | length' plan.json)
-        DELETE_COUNT=$(nix run nixpkgs#jq --  '[.resource_changes[]? | select(.change.actions | contains(["delete"]))] | length' plan.json)
-        TOTAL_COUNT=$(nix run nixpkgs#jq --  '[.resource_changes[]?] | length' plan.json)
-        
-        echo "| Action | Count |" >> $GITHUB_STEP_SUMMARY
-        echo "|--------|-------|" >> $GITHUB_STEP_SUMMARY
-        echo "| ✅ Create | $CREATE_COUNT |" >> $GITHUB_STEP_SUMMARY
-        echo "| 📝 Update | $UPDATE_COUNT |" >> $GITHUB_STEP_SUMMARY
-        echo "| ❌ Delete | $DELETE_COUNT |" >> $GITHUB_STEP_SUMMARY
-        echo "" >> $GITHUB_STEP_SUMMARY
-        
-        if [ "$TOTAL_COUNT" -eq 0 ]; then
-          echo "✅ **No changes detected.** Infrastructure is up to date." >> $GITHUB_STEP_SUMMARY
-        else
-          echo "📋 **Total Changes:** $TOTAL_COUNT resources" >> $GITHUB_STEP_SUMMARY
+      - name: Run Terraform Plan
+        run: nix run .#ci-plan
+
+      - name: Generate Plan Summary
+        if: always()
+        run: |
+          echo "## 🏗️ Terraform Plan Summary" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
-          echo "### 🔍 Changed Resources:" >> $GITHUB_STEP_SUMMARY
+
+          if [ ! -f plan.json ]; then
+            echo "⚠️ Plan file not found" >> $GITHUB_STEP_SUMMARY
+            exit 0
+          fi
+
+          # Parse plan.json for summary
+          CREATE_COUNT=$(nix run nixpkgs#jq --  '[.resource_changes[]? | select(.change.actions | contains(["create"]))] | length' plan.json)
+          UPDATE_COUNT=$(nix run nixpkgs#jq --  '[.resource_changes[]? | select(.change.actions | contains(["update"]))] | length' plan.json)
+          DELETE_COUNT=$(nix run nixpkgs#jq --  '[.resource_changes[]? | select(.change.actions | contains(["delete"]))] | length' plan.json)
+          TOTAL_COUNT=$(nix run nixpkgs#jq --  '[.resource_changes[]?] | length' plan.json)
+
+          echo "| Action | Count |" >> $GITHUB_STEP_SUMMARY
+          echo "|--------|-------|" >> $GITHUB_STEP_SUMMARY
+          echo "| ✅ Create | $CREATE_COUNT |" >> $GITHUB_STEP_SUMMARY
+          echo "| 📝 Update | $UPDATE_COUNT |" >> $GITHUB_STEP_SUMMARY
+          echo "| ❌ Delete | $DELETE_COUNT |" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
-          
-          # List changed resources
-          nix run nixpkgs#jq --  -r '.resource_changes[]? | 
-            if .change.actions | contains(["delete"]) then "❌"
-            elif .change.actions | contains(["create"]) then "✅"
-            else "📝" end + " `" + .address + "` - " + (.change.actions | join(", "))' \
-            plan.json >> $GITHUB_STEP_SUMMARY
-        fi
-        
-        echo "" >> $GITHUB_STEP_SUMMARY
-        echo "---" >> $GITHUB_STEP_SUMMARY >> $GITHUB_STEP_SUMMARY
+
+          if [ "$TOTAL_COUNT" -eq 0 ]; then
+            echo "✅ **No changes detected.** Infrastructure is up to date." >> $GITHUB_STEP_SUMMARY
+          else
+            echo "📋 **Total Changes:** $TOTAL_COUNT resources" >> $GITHUB_STEP_SUMMARY
+            echo "" >> $GITHUB_STEP_SUMMARY
+            echo "### 🔍 Changed Resources:" >> $GITHUB_STEP_SUMMARY
+            echo "" >> $GITHUB_STEP_SUMMARY
+            
+            # List changed resources
+            nix run nixpkgs#jq --  -r '.resource_changes[]? | 
+              if .change.actions | contains(["delete"]) then "❌"
+              elif .change.actions | contains(["create"]) then "✅"
+              else "📝" end + " `" + .address + "` - " + (.change.actions | join(", "))' \
+              plan.json >> $GITHUB_STEP_SUMMARY
+          fi
+
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "---" >> $GITHUB_STEP_SUMMARY >> $GITHUB_STEP_SUMMARY
