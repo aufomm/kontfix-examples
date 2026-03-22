@@ -42,6 +42,10 @@ in
           description = "Control plane used for k0s cluster";
           create_certificate = true;
           auth_type = "pinned_client_certs";
+          system_account = {
+            enable = true;
+            generate_token = true;
+          };
           cluster_type = "CLUSTER_TYPE_K8S_INGRESS_CONTROLLER";
           labels = {
             environment = "local";
