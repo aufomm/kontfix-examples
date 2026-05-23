@@ -38,6 +38,14 @@ in
             generate_token = true;
           };
         };
+        ai = {
+          description = "AI Gateway Control Plane";
+          create_certificate = true;
+          system_account = {
+            enable = true;
+            generate_token = true;
+          };
+        };
       };
     };
   };
