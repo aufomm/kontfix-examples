@@ -1,15 +1,14 @@
 name: Terraform Plan
 
 on:
-  workflow_dispatch:
-  # pull_request:
-  #   branches: [main]
-  #   types: [opened, synchronize, reopened]
-  #   paths:
-  #     - "konnect/**"
-  #     - "custom-plugin-schemas/*"
-  #     - "flake.nix"
-  #     - "flake.lock"
+  pull_request:
+    branches: [main]
+    types: [opened, synchronize, reopened]
+    paths:
+      - "konnect/**"
+      - "custom-plugin-schemas/*"
+      - "flake.nix"
+      - "flake.lock"
 
 concurrency:
   group: terraform-plan
