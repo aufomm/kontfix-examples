@@ -29,20 +29,6 @@
             team = "platform";
           };
         };
-        prod = {
-          name = "production";
-          description = "production control plane";
-          custom_plugins = [ "path-prefix" ];
-          create_certificate = true;
-          system_account = {
-            enable = true;
-            generate_token = true;
-          };
-          labels = {
-            environment = "prod";
-            team = "platform";
-          };
-        };
       };
     };
   };
