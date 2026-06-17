@@ -30,7 +30,7 @@
           };
         };
         prod = {
-          name = "prodiction";
+          name = "production";
           description = "production control plane";
           custom_plugins = [ "path-prefix" ];
           create_certificate = true;
