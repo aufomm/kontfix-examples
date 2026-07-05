@@ -12,7 +12,7 @@ concurrency:
 
 jobs:
   renewal-check:
-    runs-on: self-hosted
+    runs-on: ubuntu-latest
     permissions:
       contents: read
       actions: read
@@ -27,9 +27,40 @@ jobs:
       AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
       AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
       AWS_ENDPOINT_URL_S3: ${{ secrets.AWS_ENDPOINT_URL_S3 }}
+      NODE_EXTRA_CA_CERTS: /etc/ssl/certs/ca-certificates.crt
+      
     steps:
       - name: Checkout repository
         uses: actions/checkout@v7
+
+      - name: Connect to Tailscale
+        uses: tailscale/github-action@v4
+        with:
+          oauth-client-id: ${{ secrets.TS_OAUTH_CLIENT_ID }}
+          oauth-secret: ${{ secrets.TS_OAUTH_CLIENT_SECRET }}
+          tags: tag:gh-ci
+
+      - name: Install and Trust Self-Signed CA
+        run: |
+          # Save the secret cert to the Ubuntu CA directory
+          echo "${{ secrets.HOME_CA }}" | sudo tee /usr/local/share/ca-certificates/home-ca.crt
+          
+          # Update the OS trust store
+          sudo update-ca-certificates
+          
+          # Tell the Terraform Vault Provider where to find the CA bundle
+          echo "VAULT_CACERT=/etc/ssl/certs/ca-certificates.crt" >> $GITHUB_ENV
+
+      - name: Add Vault host mapping
+        run: |
+          if [ -z "${{ vars.HOMELAB_VAULT_HOST_IP }}" ]; then
+            echo "❌ Missing repository/org variable: HOMELAB_VAULT_HOST_IP"
+            echo "Set HOMELAB_VAULT_HOST_IP to your internal Vault IP"
+            exit 1
+          fi
+
+          echo "${{ vars.HOMELAB_VAULT_HOST_IP }} vault.li.lab" | sudo tee -a /etc/hosts
+          getent hosts vault.li.lab
 
       - name: Install Nix
         uses: cachix/install-nix-action@v31

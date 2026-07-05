@@ -30,7 +30,7 @@ concurrency:
 
 jobs:
   apply:
-    runs-on: self-hosted
+    runs-on: ubuntu-latest
     if: |
       (github.event_name == 'pull_request' &&
        github.event.pull_request.merged == true &&
@@ -52,6 +52,8 @@ jobs:
       AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
       AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
       AWS_ENDPOINT_URL_S3: ${{ secrets.AWS_ENDPOINT_URL_S3 }}
+      NODE_EXTRA_CA_CERTS: /etc/ssl/certs/ca-certificates.crt
+      VAULT_HOST: vault.li.lab
     steps:
       - name: Validate manual trigger confirmation
         if: github.event_name == 'workflow_dispatch'
@@ -92,6 +94,35 @@ jobs:
         uses: actions/checkout@v7
         with:
           ref: ${{ github.event.pull_request.merge_commit_sha || github.sha }}
+
+      - name: Connect to Tailscale
+        uses: tailscale/github-action@v4
+        with:
+          oauth-client-id: ${{ secrets.TS_OAUTH_CLIENT_ID }}
+          oauth-secret: ${{ secrets.TS_OAUTH_CLIENT_SECRET }}
+          tags: tag:gh-ci
+
+      - name: Install and Trust Self-Signed CA
+        run: |
+          # Save the secret cert to the Ubuntu CA directory
+          echo "${{ secrets.HOME_CA }}" | sudo tee /usr/local/share/ca-certificates/home-ca.crt
+
+          # Update the OS trust store
+          sudo update-ca-certificates
+
+          # Tell the Terraform Vault Provider where to find the CA bundle
+          echo "VAULT_CACERT=/etc/ssl/certs/ca-certificates.crt" >> $GITHUB_ENV
+
+      - name: Add Vault host mapping
+        run: |
+          if [ -z "${{ vars.HOMELAB_VAULT_HOST_IP }}" ]; then
+            echo "❌ Missing repository/org variable: HOMELAB_VAULT_HOST_IP"
+            echo "Set HOMELAB_VAULT_HOST_IP to your internal Vault IP"
+            exit 1
+          fi
+
+          echo "${{ vars.HOMELAB_VAULT_HOST_IP }} $VAULT_HOST" | sudo tee -a /etc/hosts
+          getent hosts "$VAULT_HOST"
 
       - name: Install Nix
         uses: cachix/install-nix-action@v31
