@@ -96,7 +96,7 @@
                 echo "::endgroup::"
                 
                 echo "::group::Terraform plan"
-                ${terraform}/bin/terraform plan -out=tfplan
+                ${terraform}/bin/terraform plan -parallelism=20 -out=tfplan
                 echo "::endgroup::"
                 
                 echo "::group::Converting plan to JSON"
@@ -121,7 +121,7 @@
                 echo "::endgroup::"
                 
                 echo "::group::Terraform plan"
-                ${terraform}/bin/terraform plan -out=tfplan
+                ${terraform}/bin/terraform plan -parallelism=20 -out=tfplan
                 echo "::endgroup::"
                 
                 echo "::group::Terraform apply"
