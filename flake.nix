@@ -96,7 +96,7 @@
                 echo "::endgroup::"
                 
                 echo "::group::Terraform plan"
-                ${terraform}/bin/terraform plan -parallelism=20 -out=tfplan
+                ${terraform}/bin/terraform plan -lock-timeout=5m -parallelism=4 -out=tfplan
                 echo "::endgroup::"
                 
                 echo "::group::Converting plan to JSON"
@@ -121,11 +121,11 @@
                 echo "::endgroup::"
                 
                 echo "::group::Terraform plan"
-                ${terraform}/bin/terraform plan -parallelism=20 -out=tfplan
+                ${terraform}/bin/terraform plan -lock-timeout=5m -parallelism=4 -out=tfplan
                 echo "::endgroup::"
                 
                 echo "::group::Terraform apply"
-                ${terraform}/bin/terraform apply -auto-approve tfplan
+                ${terraform}/bin/terraform apply -lock-timeout=5m -parallelism=4 -auto-approve tfplan
                 echo "::endgroup::"
               ''
             );

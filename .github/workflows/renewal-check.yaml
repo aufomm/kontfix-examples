@@ -18,6 +18,8 @@ jobs:
       actions: read
       issues: write
     env:
+      TF_IN_AUTOMATION: "true"
+      TF_INPUT: "0"
       TF_VAR_cp_admin_token: ${{ secrets.CP_ADMIN_TOKEN }}
       TF_VAR_id_admin_token: ${{ secrets.ID_ADMIN_TOKEN }}
       TF_VAR_vault_role_id: ${{ secrets.vault_role_id }}
@@ -94,19 +96,40 @@ jobs:
         id: generate-plan
         run: |
           echo "🔍 Generating renewal plan..."
-          for attempt in 1 2 3; do
-            echo "📋 Attempt $attempt/3..."
-            if nix run .#ci-plan; then
+          max_attempts=6
+          plan_succeeded=false
+          for attempt in $(seq 1 "$max_attempts"); do
+            echo "📋 Attempt $attempt/$max_attempts..."
+
+            # Capture output so we can distinguish transient API errors from hard failures.
+            if nix run .#ci-plan 2>&1 | tee plan-attempt.log; then
               echo "✅ Plan generated on attempt $attempt"
+              plan_succeeded=true
               break
             fi
-            if [ "$attempt" -eq 3 ]; then
-              echo "❌ Plan generation failed after 3 attempts"
+
+            if [ "$attempt" -eq "$max_attempts" ]; then
+              echo "❌ Plan generation failed after $max_attempts attempts"
               exit 1
             fi
-            echo "⚠️  Attempt $attempt failed, retrying in 30s..."
-            sleep 30
+
+            if grep -Eiq "unexpected response from API|status code: 429|status code: 5[0-9]{2}|context deadline exceeded|connection reset by peer|EOF|TLS handshake timeout" plan-attempt.log; then
+              backoff=$((15 * (2 ** (attempt - 1))))
+              if [ "$backoff" -gt 180 ]; then
+                backoff=180
+              fi
+              echo "⚠️  Transient provider/API error detected. Retrying in ${backoff}s..."
+              sleep "$backoff"
+            else
+              echo "❌ Non-retriable Terraform error detected; stopping retries."
+              exit 1
+            fi
           done
+
+          if [ "$plan_succeeded" != "true" ]; then
+            echo "❌ Plan generation did not succeed"
+            exit 1
+          fi
 
           if [ ! -f plan.json ]; then
             echo "❌ Plan file not found"
@@ -225,7 +248,40 @@ jobs:
           echo "" >> $GITHUB_STEP_SUMMARY
 
           echo "✅ **Starting token rotation...**"
-          nix run .#ci-apply
+          max_attempts=6
+          apply_succeeded=false
+
+          for attempt in $(seq 1 "$max_attempts"); do
+            echo "🚀 Apply attempt $attempt/$max_attempts..."
+
+            if nix run .#ci-apply 2>&1 | tee apply-attempt.log; then
+              echo "✅ Apply completed on attempt $attempt"
+              apply_succeeded=true
+              break
+            fi
+
+            if [ "$attempt" -eq "$max_attempts" ]; then
+              echo "❌ Apply failed after $max_attempts attempts"
+              exit 1
+            fi
+
+            if grep -Eiq "unexpected response from API|status code: 429|status code: 5[0-9]{2}|context deadline exceeded|connection reset by peer|EOF|TLS handshake timeout" apply-attempt.log; then
+              backoff=$((15 * (2 ** (attempt - 1))))
+              if [ "$backoff" -gt 180 ]; then
+                backoff=180
+              fi
+              echo "⚠️  Transient provider/API error detected. Retrying in ${backoff}s..."
+              sleep "$backoff"
+            else
+              echo "❌ Non-retriable Terraform error detected; stopping retries."
+              exit 1
+            fi
+          done
+
+          if [ "$apply_succeeded" != "true" ]; then
+            echo "❌ Apply did not succeed"
+            exit 1
+          fi
 
           echo "🎉 **Token rotation completed successfully!**" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
